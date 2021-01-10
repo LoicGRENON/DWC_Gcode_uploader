@@ -4,6 +4,7 @@ import logging
 import requests
 import time
 from pathlib import Path
+from plyer import notification
 from watchdog.events import RegexMatchingEventHandler
 
 
@@ -36,17 +37,35 @@ class FileEventHandler(RegexMatchingEventHandler):
         err_code = 0
         try:
             with open(filepath, 'rb') as data:
+                notification.notify(
+                    title=f"Uploading {fname}",
+                    message=f"{fname} is uploading to DWC",
+                    app_name="DWC_Gcode_uploader",
+                    timeout=10
+                )
                 r = requests.put(f'http://192.168.1.38/machine/file/gcodes/{fname}', data=data)
                 self.__logger.debug(f"Uploading status code: {r.status_code} ...")
                 err_code = 0 if r.status_code == 201 else 1
         except OSError as e:
             self.__logger.error(e)
+            notification.notify(
+                title=f"Upload error",
+                message=f"Error when uploading {fname} to DWC: {e}",
+                app_name="DWC_Gcode_uploader",
+                timeout=10
+            )
 
         if not err_code:
             self.start_printing(fname)
 
     def start_printing(self, filename):
         self.__logger.debug(f"Start printing {filename} ...")
+        notification.notify(
+            title=f"Printing {filename}",
+            message=f"{filename} is now printing",
+            app_name="DWC_Gcode_uploader",
+            timeout=10
+        )
         r = requests.post('http://192.168.1.38/machine/code', data=f'M32 "0:/gcodes/{filename}"')
         self.__logger.debug(f"DoCode status code: {r.status_code} ...")
 
