@@ -56,7 +56,7 @@ class FileEventHandler(RegexMatchingEventHandler):
             )
 
         if not err_code:
-            self.start_printing(fname)
+            self.start_printing(p.name)
 
     def start_printing(self, filename):
         self.__logger.debug(f"Start printing {filename} ...")
