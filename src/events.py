@@ -11,8 +11,9 @@ from watchdog.events import RegexMatchingEventHandler
 class FileEventHandler(RegexMatchingEventHandler):
     GCODE_REGEX = [r".*\.gcode$"]
 
-    def __init__(self):
+    def __init__(self, cli_args):
         super().__init__(self.GCODE_REGEX)
+        self.__cli_args = cli_args
         self.__prev_file = None
         self.__last_event_time = time.time()
 
@@ -37,34 +38,30 @@ class FileEventHandler(RegexMatchingEventHandler):
         err_code = 0
         try:
             with open(filepath, 'rb') as data:
-                notification.notify(
+                self.__notify(
                     title=f"Uploading {fname}",
-                    message=f"{fname} is uploading to DWC",
-                    app_name="DWC_Gcode_uploader",
-                    timeout=10
+                    message=f"{fname} is uploading to DWC"
                 )
                 r = requests.put(f'http://192.168.1.38/machine/file/gcodes/{fname}', data=data)
                 self.__logger.debug(f"Uploading status code: {r.status_code} ...")
                 err_code = 0 if r.status_code == 201 else 1
         except OSError as e:
             self.__logger.error(e)
-            notification.notify(
+            self.__notify(
                 title=f"Upload error",
-                message=f"Error when uploading {fname} to DWC: {e}",
-                app_name="DWC_Gcode_uploader",
-                timeout=10
+                message=f"Error when uploading {fname} to DWC: {e}"
             )
 
-        if not err_code:
+        if not err_code and not self.__cli_args.upload_only:
             self.start_printing(p.name)
 
+        self.__delete_local_gcode_file(p)
+
     def start_printing(self, filename):
-        self.__logger.debug(f"Start printing {filename} ...")
-        notification.notify(
+        self.__logger.debug(f"Start printing '{filename}' ...")
+        self.__notify(
             title=f"Printing {filename}",
-            message=f"{filename} is now printing",
-            app_name="DWC_Gcode_uploader",
-            timeout=10
+            message=f"{filename} is now printing"
         )
         r = requests.post('http://192.168.1.38/machine/code', data=f'M32 "0:/gcodes/{filename}"')
         self.__logger.debug(f"DoCode status code: {r.status_code} ...")
@@ -76,3 +73,29 @@ class FileEventHandler(RegexMatchingEventHandler):
         # fname_sanitized = requests.utils.quote(requests.utils.quote(filename))
         fname_sanitized = requests.utils.quote(filename)
         return fname_sanitized
+
+    def __notify(self, title, message, timeout=10):
+        if self.__cli_args.silent:
+            return
+
+        notification.notify(
+            title=title,
+            message=message,
+            app_name="DWC_Gcode_uploader",
+            timeout=timeout
+        )
+
+    def __delete_local_gcode_file(self, file_path):
+        self.__logger.debug("Cleaning local files")
+        try:
+            file_path.unlink()
+            # ideamaker also saves a .data file
+            file_path.with_suffix('.data').unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            self.__logger.error(e)
+            self.__notify(
+                title=f"Cleaning error",
+                message=f"Error when cleaning directory: {e}"
+            )
