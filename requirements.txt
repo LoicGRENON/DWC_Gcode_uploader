@@ -1,3 +1,2 @@
-plyer
-requests
+Pyside2
 watchdog
